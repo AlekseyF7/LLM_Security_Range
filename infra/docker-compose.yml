@@ -1,0 +1,246 @@
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+      args:
+        # NEXT_PUBLIC_* запекаются в bundle на этапе build.
+        # ВАЖНО: дефолт — пустая строка, НЕ http://localhost:8000.
+        # page.tsx::resolveApiUrl при пустом значении считает URL из
+        # window.location.hostname:8000 → браузер с LAN-IP ходит на
+        # правильный backend, а не на свой localhost. Укажи
+        # NEXT_PUBLIC_API_URL в .env ТОЛЬКО если API живёт на другом домене.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_MOCK_MODE: ${NEXT_PUBLIC_MOCK_MODE:-false}
+    container_name: llm-web
+    ports:
+      - "${WEB_PORT:-3001}:3001"
+    networks:
+      - frontend_net
+      # web's /api/traces server-route reaches langfuse, which binds only its
+      # backend_net interface (api logs fine because it is on backend_net too).
+      # Without this, web (frontend-only) gets Connection refused to langfuse.
+      - backend_net
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-}
+      - NEXT_PUBLIC_MOCK_MODE=${NEXT_PUBLIC_MOCK_MODE:-false}
+      # Server-side only (read by app/api/traces + app/api/scoreboard route
+      # handlers). NOT NEXT_PUBLIC_* and NOT build.args — these must never
+      # reach the client bundle. web reaches langfuse over backend_net (see networks).
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse:3000}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - PROMPTFOO_RESULTS_PATH=/app/promptfoo-results.json
+    volumes:
+      # Latest promptfoo run, written on the host by
+      # `npx promptfoo eval --output promptfoo-results.json`. Read-only so a
+      # web compromise can't tamper with results. Stub committed in repo root.
+      - ../promptfoo-results.json:/app/promptfoo-results.json:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    container_name: llm-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    networks:
+      - frontend_net
+      - backend_net
+    env_file:
+      - .env
+    # EN: Bind-mount tests/ and pytest.ini so devs can run unit tests
+    #     without rebuilding the image. The api image itself (Dockerfile.api)
+    #     copies only src/ + target_data/, so without these mounts the tests
+    #     are missing inside the container (file-not-found from pytest).
+    #     :ro = read-only so a container compromise can't tamper with tests.
+    # RU: Монтируем тесты read-only, чтобы pytest видел их сразу после git
+    #     pull, без пересборки image.
+    volumes:
+      - ../tests:/app/tests:ro
+      - ../pytest.ini:/app/pytest.ini:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      mcp-cve:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: llm-ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:0.5.17
+    container_name: llm-chroma
+    ports:
+      - "127.0.0.1:8200:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      # Глушит шумный warning `capture() takes 1 positional argument but 3 were given`
+      # — это баг posthog-клиента vs chromadb 0.5.17, телеметрия нам не нужна.
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: llm-postgres
+    expose:
+      - "5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-devops_user} -d ${POSTGRES_DB:-langfuse}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  mcp-cve:
+    # EN: Mini MCP CVE server (Streamable HTTP transport on /mcp).
+    #     Wraps the public NVD REST API; isolated in its own container
+    #     so red-team tests can target it directly without taking down
+    #     the main agent.
+    # RU: Отдельный docker-сервис, чтобы атаки на MCP не валили api.
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.mcp_cve
+    container_name: llm-mcp-cve
+    expose:
+      - "8800"
+    networks:
+      - backend_net
+    environment:
+      - MCP_CVE_HOST=0.0.0.0
+      - MCP_CVE_PORT=8800
+    healthcheck:
+      # EN: MCP /mcp endpoint requires Accept: text/event-stream — a plain
+      #     curl GET returns 406 spam in logs every 10s. We probe the port
+      #     itself with python's socket (always works, no log noise from
+      #     MCP itself logging the 406 reject).
+      # RU: Порт-probe вместо HTTP, чтобы /mcp не плевался 406 каждые 10с.
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost', 8800)); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  langfuse:
+    # Pinned to конкретный последний v2-релиз. Тег `:2` в registry может
+    # переопределяться вендором — если затянуло v3, появляется требование
+    # ClickHouse + Redis + S3 и unhealthy. Конкретный SHA/тег это убирает.
+    image: langfuse/langfuse:2.93.7
+    container_name: llm-langfuse
+    ports:
+      - "${LANGFUSE_PORT:-3000}:3000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Серверные секреты Langfuse — отдельные от project API-keys.
+      # Раньше переиспользовали LANGFUSE_SECRET_KEY/PUBLIC_KEY, но это
+      # связывало ротацию SDK-ключей с инвалидацией админ-сессий и
+      # расшифровкой ключей в БД. Теперь два независимых секрета.
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:?LANGFUSE_NEXTAUTH_SECRET must be set}
+      - SALT=${LANGFUSE_SALT:?LANGFUSE_SALT must be set}
+      - NEXTAUTH_URL=http://${TARGET_IP:-localhost}:${LANGFUSE_PORT:-3000}
+      - TELEMETRY_ENABLED=false
+      # Bind the Next.js standalone server to ALL interfaces. Docker sets
+      # HOSTNAME=<container-id> by default → Langfuse binds only its first
+      # network IP (backend_net) → unreachable from frontend_net + loopback.
+      # 0.0.0.0 makes it listen everywhere (web reaches it; healthcheck localhost OK).
+      - HOSTNAME=0.0.0.0
+      # Явно отключаем v3-only зависимости, чтобы образ не пытался к ним коннектиться
+      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=false
+      - LANGFUSE_INIT_ORG_ID=demo-org
+      - LANGFUSE_INIT_ORG_NAME=DemoOrg
+      - LANGFUSE_INIT_PROJECT_ID=demo-project
+      - LANGFUSE_INIT_PROJECT_NAME=LLM-Security
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_INIT_USER_EMAIL=admin@demo.local
+      - LANGFUSE_INIT_USER_PASSWORD=admin123
+      - LANGFUSE_INIT_USER_NAME=Admin
+    healthcheck:
+      # EN: Probe Langfuse's own /api/public/health ({"status":"OK"}, plain 200).
+      #     Two gotchas baked in:
+      #     1) endpoint — NOT `/` (it 307→/auth/sign-in; busybox wget won't
+      #        follow → false unhealthy).
+      #     2) host — NOT localhost. Langfuse v2 binds the container's network
+      #        interface, not loopback (verified: 127.0.0.1:3000 → refused,
+      #        <eth-ip>:3000 → 200). The container is on TWO networks and only
+      #        one IP answers, so we loop over `hostname -i` and pass if ANY does.
+      # RU: localhost внутри контейнера не слушается (Langfuse на сетевом
+      #     интерфейсе, не loopback) → перебираем IP из `hostname -i`, healthy
+      #     если хоть один отдал OK. `$$` — экранирование `$` для docker-compose.
+      test: ["CMD-SHELL", "for ip in $$(hostname -i); do wget -q -O - http://$$ip:3000/api/public/health 2>/dev/null | grep -q OK && exit 0; done; exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 240s
+    networks:
+      - backend_net
+      - frontend_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  frontend_net:
+    driver: bridge
+  backend_net:
+    driver: bridge
+
+volumes:
+  ollama_data:
+  chroma_data:
+  postgres_data:

@@ -1,0 +1,47 @@
+# ──────────────────────────────────────────────────────────────────────
+# Smart Wiki — Next.js 16 (App Router, React 19, Tailwind 4)
+# WARNING: read web/AGENTS.md — этот Next.js 16 имеет breaking changes
+# относительно публичных версий. Внутренние оптимизации Dockerfile
+# (например, output:"standalone") не подключаем без сверки с
+# web/node_modules/next/dist/docs/.
+# ──────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY web/package.json web/package-lock.json* ./
+# React 19 в зависимостях lucide-react@^1 — peer-deps могут конфликтовать.
+RUN npm install --no-audit --no-fund --legacy-peer-deps
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY web/ ./
+ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* зашиваются в bundle на этапе build — пробрасываем заранее.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_MOCK_MODE
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_MOCK_MODE=${NEXT_PUBLIC_MOCK_MODE}
+RUN npm run build
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
+# NOTE: no `COPY /app/public` — this project has no web/public/ dir (the only
+# static asset, favicon.ico, lives in web/app/). The default Next.js scaffold
+# SVGs were removed during repo cleanup, which deleted the folder; copying a
+# non-existent path made the docker build fail ("/app/public": not found).
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/next.config.ts ./next.config.ts
+# target_data/scenarios.yaml — read at runtime by app/api/scenarios/route.ts
+# (Lab challenges + Landing scenario cards). Build context is the repo root
+# (see docker-compose web.build.context: ..), so this path is repo-relative.
+COPY target_data/scenarios.yaml ./target_data/scenarios.yaml
+
+EXPOSE 3001
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 --start-period=20s \
+    CMD wget -qO- http://localhost:3001/ > /dev/null 2>&1 || exit 1
+
+CMD ["npx", "next", "start", "-p", "3001"]

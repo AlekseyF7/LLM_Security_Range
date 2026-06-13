@@ -1,0 +1,50 @@
+# NeMo Guardrails Colang flows — Smart Wiki
+# EN: Input/output flow definitions for self-check, canary-leak rails,
+#     and the main flow that delegates response generation to our
+#     LangGraph agent (so RAG + L3 RBAC actually run in guard-ON mode).
+# RU: Colang-политики:
+#     - self_check_input / self_check_output / canary_leak_detection
+#       (input/output rails — фильтры до и после ответа)
+#     - main flow «agent rag response» — ловит ЛЮБОЕ user-сообщение и
+#       делегирует генерацию ответа в src.api.agent_runner.run_agent
+#       (LangGraph: classify_intent → rag_search [L3 RBAC] → generate).
+#       Без него NeMo генерировал ответ через свой internal LLM-call по
+#       config.yml::instructions — без RAG и без RBAC, ответы галлюцинировали.
+
+define flow self check input
+  $allowed = execute self_check_input
+  if not $allowed
+    bot refuse input
+    stop
+
+define flow self check output
+  $allowed = execute self_check_output
+  if not $allowed
+    bot refuse output
+    stop
+
+define flow canary leak detection
+  $leaked = execute check_canary_leak
+  if $leaked
+    bot refuse canary
+    stop
+
+# ── Main response flow ──────────────────────────────────────────────────
+# `user ...` — wildcard intent. Любое сообщение пользователя, прошедшее
+# input rails, идёт сюда. Action call_agent читает роль из contextvar
+# (см. guardrails_runtime._role_var), забирает user_message из контекста
+# NeMo и вызывает LangGraph-агент. Результат отдаётся через `bot $answer`,
+# дальше отрабатывают output rails (self_check_output + canary leak).
+define flow agent rag response
+  user ...
+  $answer = execute call_agent
+  bot $answer
+
+define bot refuse input
+  "Запрос заблокирован на входном фильтре. Переформулируйте вопрос без инструкций по обходу системы."
+
+define bot refuse output
+  "Ответ заблокирован на выходном фильтре (обнаружены учётные данные / системная информация)."
+
+define bot refuse canary
+  "Ответ заблокирован: обнаружена утечка canary-токена (попытка indirect prompt injection)."

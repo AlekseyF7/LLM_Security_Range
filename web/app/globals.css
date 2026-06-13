@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #070b16;
+  --surface: rgba(255, 255, 255, 0.025);
+  --surface-2: rgba(255, 255, 255, 0.045);
+  --border: rgba(255, 255, 255, 0.08);
+  --fg: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #22d3ee;        /* cyan */
+  --ok: #34d399;            /* pass */
+  --bad: #f43f5e;           /* block / fail */
+  --warn: #f59e0b;          /* guards off */
+  --l1: #f43f5e;
+  --l2: #f97316;
+  --l3: #8b5cf6;
+  --l4: #d946ef;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-bad: var(--bad);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+code,
+pre,
+.font-mono {
+  font-family: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Thin scrollbars + cyan selection (carried from the previous UI) */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(51 65 85) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgb(51 65 85);
+  border-radius: 4px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: rgb(71 85 105);
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.25);
+  color: #f0fdfa;
+}

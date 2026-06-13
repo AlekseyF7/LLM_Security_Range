@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Data & models
+chroma_data/
+ollama_data/
+postgres_data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Node (promptfoo)
+node_modules/
+.promptfoo/
+
+# Logs
+*.log
+
+# Byte-compiled
+*.so
+
+# Secrets — НИКОГДА не коммитить
+.env
+.env.local
+.env.*.local
+infra/.env
+infra/.env.local
+**/.env
+# .env.example — оставляем как референс
+!.env.example
+!infra/.env.example
+
+# Superpowers brainstorm/companion artifacts (local only)
+.superpowers/
+
+# Generated eval / red-team outputs (promptfoo-results.json is intentionally
+# tracked — it is bind-mounted into web as dashboard scoreboard seed data).
+red_team/results/
+red_team/reports/
+red_team/behavioral/results/
+
+# Local Claude Code settings (per-developer, not shared)
+.claude/settings.local.json

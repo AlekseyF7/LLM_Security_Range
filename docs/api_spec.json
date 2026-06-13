@@ -1,0 +1,159 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Smart Wiki API Gateway",
+    "version": "0.2.0",
+    "description": "Защищённый шлюз киберполигона: 4-слойная защита (NeMo input/output guards, slowapi behavioral monitoring, RBAC tool access control) + Langfuse tracing. Роль вызывающего передаётся заголовком X-User-Role."
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Проверка доступности API. Используется в healthcheck Docker и shell-скриптах.",
+        "responses": {
+          "200": {
+            "description": "API доступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "status": { "type": "string", "example": "ok" } }
+                },
+                "example": { "status": "ok" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "summary": "Chat endpoint",
+        "description": "Принимает запрос пользователя и прогоняет его через L1 input guard → LangGraph agent (RAG + L3 RBAC, при intent tool_lookup_cve — MCP) → L4 output guard.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-User-Role",
+            "required": false,
+            "schema": { "type": "string", "enum": ["anonymous", "user", "admin"], "default": "anonymous" },
+            "description": "Роль вызывающего (RBAC / L3). По умолчанию anonymous."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChatRequest" },
+              "example": { "query": "Как настроить VPN?", "mode": "chat" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ. blocked=true означает блок L4 (output guard переписал ответ).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatResponse" },
+                "example": {
+                  "answer": "Для настройки VPN выполните следующие шаги...",
+                  "blocked": false,
+                  "guard_message": null,
+                  "trace_id": "9d290e1c-2227-4516-95a1-..."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Блок L1 (input guard / jailbreak). detail = объект ChatResponse.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "detail": { "$ref": "#/components/schemas/ChatResponse" } }
+                },
+                "example": {
+                  "detail": { "answer": "", "blocked": true, "guard_message": "rail=self check input stopped", "trace_id": "..." }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Блок L2 (behavioral / temp-block по IP). detail = объект ChatResponse.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "detail": { "$ref": "#/components/schemas/ChatResponse" } }
+                },
+                "example": {
+                  "detail": { "answer": "", "blocked": true, "guard_message": "IP temporarily blocked for 287s...", "trace_id": "..." }
+                }
+              }
+            }
+          },
+          "422": { "description": "Ошибка валидации (неверный формат запроса)." },
+          "500": {
+            "description": "Внутренняя ошибка (не guard). detail = объект ChatResponse с blocked=true и описанием сбоя."
+          }
+        }
+      }
+    },
+    "/api/v1/system/status": {
+      "get": {
+        "summary": "System status",
+        "description": "Публичный статус для UI-баннера: включена ли защита и какой runtime активен.",
+        "responses": {
+          "200": {
+            "description": "Текущее состояние",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SystemStatus" },
+                "example": {
+                  "version": "0.2.0",
+                  "guardrails_enabled": true,
+                  "guardrails_runtime": "nemo",
+                  "uptime_seconds": 12345,
+                  "chat_model": "granite4.1:8b",
+                  "embedding_model": "bge-m3"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": { "type": "string", "description": "Текст запроса пользователя" },
+          "mode": { "type": "string", "default": "chat", "description": "Режим работы. По умолчанию 'chat'." }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {
+          "answer": { "type": "string", "description": "Ответ агента. При блоке L4 заменяется на сообщение о блокировке; при блоке L1 — пустая строка." },
+          "blocked": { "type": "boolean", "default": false, "description": "true если запрос/ответ заблокирован любым слоем защиты." },
+          "guard_message": { "type": ["string", "null"], "description": "Причина блокировки (null если не заблокирован)." },
+          "trace_id": { "type": ["string", "null"], "description": "Langfuse trace id для deep-link (${LANGFUSE_HOST}/trace/${trace_id}); null если недоступен." }
+        }
+      },
+      "SystemStatus": {
+        "type": "object",
+        "properties": {
+          "version": { "type": "string" },
+          "guardrails_enabled": { "type": "boolean" },
+          "guardrails_runtime": { "type": "string", "enum": ["nemo", "legacy_regex", "bypass"] },
+          "uptime_seconds": { "type": "number" },
+          "chat_model": { "type": "string" },
+          "embedding_model": { "type": "string" }
+        }
+      }
+    }
+  }
+}

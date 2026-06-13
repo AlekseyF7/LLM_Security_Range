@@ -1,0 +1,28 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY infra/requirements.mcp_cve.txt .
+RUN pip install --no-cache-dir -r requirements.mcp_cve.txt
+
+COPY src/mcp_cve_server/ ./src/mcp_cve_server/
+
+RUN useradd --create-home appuser
+USER appuser
+
+ENV PYTHONPATH=/app
+EXPOSE 8800
+
+# EN: MCP /mcp endpoint expects Accept: text/event-stream — plain HEAD/GET
+#     returns 406, which spams logs every 10s. Use a bare TCP-connect
+#     probe (python socket) instead — "port open" is enough signal that
+#     the uvicorn process is alive, and it doesn't trigger MCP rejections.
+# RU: Probe порта вместо HTTP, чтобы /mcp не плевался 406 каждые 10 секунд.
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=15s \
+    CMD python3 -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost', 8800)); s.close()" || exit 1
+
+CMD ["python", "-m", "src.mcp_cve_server"]
