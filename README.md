@@ -1,14 +1,14 @@
 # LLM Security Range — Smart Wiki Cyber Range
 
-Portfolio version of an LLM security cyber range: a protected corporate Wiki assistant with RAG, red-team scenarios, multi-layer guardrails and observability.
+Портфолио-версия киберполигона для проверки безопасности LLM/RAG-систем: защищенный корпоративный Wiki-ассистент с RAG, red-team сценариями, многослойными guardrails и наблюдаемостью.
 
-> Note: this repository is a clean portfolio copy of a completed university team project. My main area of work was the AI/RAG part: document ingestion, retrieval, LangGraph agent flow, role-aware retrieval filtering and integration of the agent into the API pipeline.
+> Примечание: это чистая portfolio-копия завершенного университетского командного проекта. Моя основная зона работы — AI/RAG часть: ingest документов, retrieval, LangGraph agent flow, role-aware retrieval filtering и интеграция агента в API pipeline.
 
-## What This Project Is
+## Что это за проект
 
-**LLM Security Range** is an isolated environment for testing the security of LLM-based applications. The target system is a corporate Wiki assistant that answers questions using a RAG pipeline. Around it, the project includes attack scenarios, guardrails, RBAC, canary-token leak detection, tracing and a web UI for demonstrations.
+**LLM Security Range** — изолированная среда для тестирования безопасности приложений на базе LLM. Целевая система — корпоративный Wiki-ассистент, который отвечает на вопросы через RAG-пайплайн. Вокруг него построены сценарии атак, guardrails, RBAC, canary-token leak detection, трассировка и web-интерфейс для демонстрации.
 
-The main security idea is simple: run the same system with protection enabled and disabled, then compare behavior on legitimate requests and attacks.
+Главная идея безопасности: запускать одну и ту же систему с включенной и выключенной защитой, а затем сравнивать поведение на легитимных запросах и атаках.
 
 ```text
 User / Kali
@@ -34,46 +34,46 @@ L4: Output Guardrails + Canary Detection
 Langfuse Trace + Web UI Result
 ```
 
-## Key Features
+## Ключевые возможности
 
-- RAG-based corporate Wiki assistant.
-- FastAPI gateway with stable chat contract.
+- RAG-based корпоративный Wiki-ассистент.
+- FastAPI gateway со стабильным chat contract.
 - LangGraph agent flow: `classify_intent -> rag_search -> generate_answer -> format_response`.
-- ChromaDB vector store and Ollama-based local models.
-- Role-based retrieval filtering for `anonymous`, `user` and `admin`.
-- NeMo Guardrails for input and output checks.
-- Canary-token detection for indirect prompt injection and system-prompt leakage.
-- Behavioral monitoring with rate limits and jailbreak attempt tracking.
-- MCP-based CVE lookup service isolated in a Docker network.
-- Langfuse observability with traces, spans and scores.
-- Next.js web interface with Console, Lab and Dashboard.
-- Promptfoo red-team evaluation suite mapped to OWASP LLM Top 10.
+- Векторное хранилище ChromaDB и локальные модели через Ollama.
+- Role-based retrieval filtering для ролей `anonymous`, `user` и `admin`.
+- NeMo Guardrails для input/output проверок.
+- Canary-token detection для indirect prompt injection и утечек system prompt.
+- Behavioral monitoring с rate limits и отслеживанием jailbreak-попыток.
+- MCP-based CVE lookup service, изолированный в Docker-сети.
+- Langfuse observability: traces, spans и scores.
+- Next.js web-интерфейс с Console, Lab и Dashboard.
+- Promptfoo red-team evaluation suite, сопоставленный с OWASP LLM Top 10.
 
-## Security Scenarios Covered
+## Покрытые security-сценарии
 
-- Direct prompt injection and jailbreak attempts.
-- Indirect prompt injection through poisoned RAG documents.
+- Direct prompt injection и jailbreak attempts.
+- Indirect prompt injection через poisoned RAG documents.
 - Sensitive data disclosure: credentials, API keys, PII, financial data.
 - RBAC bypass attempts.
 - Excessive agency / unsafe tool usage.
 - XSS-like unsafe output handling.
-- Rate-limit and repeated jailbreak behavior.
-- Safe CVE lookup through a controlled MCP tool.
+- Rate-limit и repeated jailbreak behavior.
+- Безопасный CVE lookup через controlled MCP tool.
 
-## My Contribution
+## Мой вклад
 
-My focus was the AI engineering part of the system:
+Мой фокус был на AI engineering части системы:
 
-- Built and integrated the RAG ingestion and answer-generation pipeline.
-- Connected the chat API to the RAG/agent runtime.
-- Worked on retrieval quality and fallback behavior.
-- Implemented the LangGraph agent skeleton with clear pipeline stages.
-- Added role-aware filtering so restricted RAG chunks do not reach the LLM context.
-- Integrated L3 tool access control into the agent flow.
-- Added Langfuse observability for agent nodes and security decisions.
-- Helped stabilize promptfoo/RAG evaluation scenarios.
+- Собрал и интегрировал RAG ingestion и answer-generation pipeline.
+- Подключил chat API к RAG/agent runtime.
+- Работал над качеством retrieval и fallback behavior.
+- Реализовал LangGraph agent skeleton с понятными стадиями pipeline.
+- Добавил role-aware filtering, чтобы restricted RAG chunks не попадали в LLM context.
+- Интегрировал L3 tool access control в agent flow.
+- Добавил Langfuse observability для agent nodes и security decisions.
+- Помог стабилизировать promptfoo/RAG evaluation scenarios.
 
-## Tech Stack
+## Технологический стек
 
 ### Backend / AI
 
@@ -103,22 +103,22 @@ My focus was the AI engineering part of the system:
 - Red-team scripts
 - GitHub Actions experiments
 
-## Skills Practiced
+## Навыки, которые я оттачивал
 
-- RAG architecture and document ingestion.
-- Vector search and retrieval filtering.
-- LLM agent design with LangGraph.
+- RAG architecture и document ingestion.
+- Vector search и retrieval filtering.
+- LLM agent design с LangGraph.
 - LLM application security.
-- Prompt injection and indirect RAG injection defense.
-- RBAC for AI tools and retrieved context.
-- Observability for LLM systems.
-- API design with FastAPI.
-- Docker-based local AI infrastructure.
+- Защита от prompt injection и indirect RAG injection.
+- RBAC для AI tools и retrieved context.
+- Observability для LLM-систем.
+- API design на FastAPI.
+- Docker-based локальная AI-инфраструктура.
 - Automated red-team evaluation.
 
-## Best Fit For
+## Под какие роли подходит проект
 
-This project is most relevant for roles such as:
+Этот проект лучше всего подходит для позиций:
 
 - Junior AI Engineer
 - LLM Engineer
@@ -127,46 +127,46 @@ This project is most relevant for roles such as:
 - AI Security Engineer
 - MLOps / AI Platform Junior
 
-## Quick Start
+## Быстрый запуск
 
-Copy environment template:
+Скопировать шаблон окружения:
 
 ```bash
 cd infra
 cp .env.example .env
 ```
 
-Start services:
+Запустить сервисы:
 
 ```bash
 docker compose up -d --build
 ```
 
-Ingest target documents:
+Загрузить target documents в RAG:
 
 ```bash
 ./ingest.sh
 ```
 
-Open:
+Открыть:
 
 - Web UI: `http://localhost:3001`
 - FastAPI: `http://localhost:8000`
 - Langfuse: `http://localhost:3000`
 
-Run red-team eval:
+Запустить red-team evaluation:
 
 ```bash
 TARGET_IP=localhost npx promptfoo eval --no-cache
 ```
 
-## Important Notes
+## Важные примечания
 
-- Documents in `target_data/secret_docs/` and `target_data/poisoned_docs/` contain fake secrets only. They are test fixtures, not real credentials.
-- The role model uses `X-User-Role` headers because this is a cyber range, not a production IAM system.
-- The project intentionally keeps infrastructure lightweight: Docker Compose and local models instead of Kubernetes, OAuth, Vault or a full production platform.
+- Документы в `target_data/secret_docs/` и `target_data/poisoned_docs/` содержат только fake secrets. Это тестовые фикстуры, а не реальные credentials.
+- Role model использует заголовок `X-User-Role`, потому что это cyber range, а не production IAM system.
+- Инфраструктура намеренно оставлена легкой: Docker Compose и локальные модели вместо Kubernetes, OAuth, Vault или полноценной production-платформы.
 
-## Repository Structure
+## Структура репозитория
 
 ```text
 src/api/                 FastAPI gateway, guardrails runtime, status endpoints
@@ -181,6 +181,6 @@ infra/                   Docker Compose and service Dockerfiles
 tests/                   Unit tests
 ```
 
-## License
+## Лицензия
 
 MIT
